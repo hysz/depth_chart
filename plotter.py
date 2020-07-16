@@ -45,7 +45,9 @@ def plot_and_show(name, prices, cumulative_depths):
     show_plot(name)
 
 ######### PARSING 0x API (FAKE RESPONSE) #########
-response_json = json.loads(requests.get(url).content)
+response = requests.get(url)
+response.raise_for_status()
+response_json = json.loads(response.content)
 sources = []
 for name,inouts in response_json['depth'].items():
     depths = [Depth(0,0)]
