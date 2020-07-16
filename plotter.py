@@ -35,9 +35,12 @@ def plot_and_show(name, prices, cumulative_depths):
 
 ######### PARSE COMMAND LINE ARGS #########
 parser = argparse.ArgumentParser()
-parser.add_argument("--url", help="url", type=str)
+parser.add_argument("--buy", help="buy token", type=str, required=True)
+parser.add_argument("--sell", help="sell token", type=str, required=True)
+parser.add_argument("--sell-amount", help="amount to sell", type=str, default='50000000000000000000000')
+parser.add_argument("--samples", help="number of samples", type=str, default='5')
 args = parser.parse_args()
-url = args.url
+url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s'%(args.buy, args.sell, args.sell_amount, args.samples)
 
 ######### PARSING 0x API (FAKE RESPONSE) #########
 response_json = json.loads(requests.get(url).content)
