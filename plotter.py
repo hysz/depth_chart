@@ -18,8 +18,9 @@ parser.add_argument("--sell", help="sell token", type=str, required=True)
 parser.add_argument("--sell-amount", help="amount to sell", type=str, default='50000000000000000000000')
 parser.add_argument("--samples", help="number of samples", type=str, default='5')
 parser.add_argument("--distribution", help="sample distribution base", type=str, default='1')
-parser.add_argument("--plot", help="what to plot [unified|individual]", type=str, default='unified')
+parser.add_argument("--plot", help="what to plot [unified|individual|both]", type=str, default='unified')
 parser.add_argument("--sources", help="source1,source2,source3,...", type=str, default="")
+parser.add_argument("--file", help="file to read from, instead of hitting URL", type=str, default="")
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
 
@@ -49,9 +50,15 @@ def plot_and_show(name, prices, cumulative_depths):
     show_plot(name)
 
 ######### PARSING 0x API (FAKE RESPONSE) #########
-response = requests.get(url)
-response.raise_for_status()
-response_json = json.loads(response.content)
+response_json = None
+if not args.file:
+    response = requests.get(url)
+    response.raise_for_status()
+    response_json = json.loads(response.content)
+    json.dump(response_json, open('./latest.json', 'w'))
+else:
+    response_json = json.load(open(args.file))
+
 sources = []
 for name,inouts in response_json['depth'].items():
     if args.sources != "" and not name.lower() in args.sources.lower():
@@ -60,6 +67,7 @@ for name,inouts in response_json['depth'].items():
     for inout in inouts:
         depths.append(Depth(float(inout["bucket"]), float(inout["output"])))
     sources.append(Source(name, depths))
+print(sources)
   
 
 ######### ALGOS #########
@@ -98,19 +106,58 @@ def get_unified_depths(sources):
     cumulative_depths = [depth for source in sources for depth in source.depths]  
     return merge_and_sort(unified_depths)
 
+def get_interpolated(depths):
+    interpolated_depths = []
+    for i,depth in enumerate(depths):
+        if i == 0:
+            continue
+        
+        if depths[i].bucket == depths[i-1].bucket + 1:
+            interpolated_depths.append(depth)
+            continue
+
+        # interpolate
+        step = (depths[i].value - depths[i-1].value) / (depths[i].bucket - depths[i-1].bucket)
+        cur_depth = float(depths[i-1].value + step)
+        for bucket in range(int(depths[i-1].bucket) + 1, int(depths[i].bucket)):
+            interpolated_depths.append(Depth(bucket, cur_depth))
+            cur_depth += step
+        interpolated_depths.append(depth)
+
+    # add remaining buckets up to 100
+    for bucket in range(int(interpolated_depths[-1].bucket) + 1, 100):
+        interpolated_depths.append(Depth(bucket, interpolated_depths[-1].value))
+
+    return interpolated_depths
+
+def is_reverse_sorted(depths):
+    for i,depth in enumerate(depths):
+        if i > 0:
+            if depth.bucket > depths[i-1].bucket:
+                print(depth.bucket, ' > ', depths[i-1].bucket)
+                return False
+
+    return True
+
 # Returns an array of Depth[] where each cumulative depth is offset from `unified_depths`.
 # So, if unified_depths has an entry of 10 at price=1, then the offset_depth will
 # add 10 to its value at price=1. This is how we create the rainbow effect.
 def offset_from_unified(depths, unified_depths):
     offset_depths = []
     for depth in depths:
-        relevant_unified_depths = [unified_depth for unified_depth in unified_depths if unified_depth.bucket == depth.bucket]
+        relevant_unified_depths = [unified_depth for unified_depth in reversed(unified_depths) if unified_depth.bucket <= depth.bucket]
+
+        if not is_reverse_sorted(relevant_unified_depths):
+            print('naaaaaha')
+            print(relevant_unified_depths)
+            raise Exception("NOt reverse sorted")
+        print(relevant_unified_depths)
+        #print([bucket for depth.bucket in relevant_unified_depths])
         if len(relevant_unified_depths) == 0:
+            # Find 
             offset_depths.append(depth)
-        elif len(relevant_unified_depths) == 1:
-            offset_depths.append(Depth(depth.bucket, depth.value + relevant_unified_depths[0].value))
         else:
-            raise Exception("Unexpected; does not appear this unified depths list is merged & sorted")
+            offset_depths.append(Depth(depth.bucket, depth.value + relevant_unified_depths[0].value))
 
     return offset_depths
 
@@ -134,12 +181,15 @@ def print_unified(sources):
     plots = []
     for source in sources:
         print("Adding ", source.name)
-        (prices, individual_cumulative_depths) = depths_to_xy(offset_from_unified(merge_and_sort(source.depths), unified_cumulative_depths))
+        sanitized_depths = offset_from_unified(get_interpolated(merge_and_sort(source.depths)), unified_cumulative_depths)
+        (prices, individual_cumulative_depths) = depths_to_xy(sanitized_depths)
         plots.append({"name": source.name, "prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
 
         # Update unified cumulative depths
-        unified_cumulative_depths += source.depths
-        unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
+        #unified_cumulative_depths += sanitized_depths
+        #unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
+        unified_cumulative_depths = sanitized_depths
+ 
 
     handles = []
     labels = []
@@ -155,6 +205,9 @@ def print_unified(sources):
     show_plot('unified')
 
 if args.plot == 'individual':
+    print_individual(sources)
+elif args.plot == 'both':
+    print_unified(sources)
     print_individual(sources)
 else:
     print_unified(sources)
