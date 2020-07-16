@@ -104,7 +104,7 @@ def merge_and_sort(depths):
 # All depths at each price will be summed together.
 def get_unified_depths(sources):
     cumulative_depths = [depth for source in sources for depth in source.depths]  
-    return merge_and_sort(unified_depths)
+    return get_interpolated(merge_and_sort(unified_depths))
 
 def get_interpolated(depths):
     interpolated_depths = []
@@ -164,7 +164,8 @@ def offset_from_unified(depths, unified_depths):
 # Prints an individual source
 def print_individual(sources):
     for source in sources:
-        (prices, cumulative_depths) = depths_to_xy(merge_and_sort(source.depths))
+        sanitized_depths = get_interpolated(merge_and_sort(source.depths))
+        (prices, cumulative_depths) = depths_to_xy(sanitized_depths)
         plot_and_show(source.name, prices, cumulative_depths)
 
 # Prints the cumulative chart
