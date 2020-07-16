@@ -141,7 +141,7 @@ def print_unified(sources):
     #colors = ["#6262A6", "#181632", "#25CD2C", "#FB4C5A", "#5C51FE"]
     for single_plot in reversed(plots):
         handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])#, colors[color_idx])
-        color_idx = (color_idx + 1)%len(colors)
+        #color_idx = (color_idx + 1)%len(colors)
         handles.append(handle)
         labels.append(single_plot["name"])
 
