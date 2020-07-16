@@ -19,23 +19,25 @@ def plot(ax, prices, cumulative_depths):
     handle = ax.fill_between(prices, 0, cumulative_depths)
     return handle
 
-def show_plot():
+def show_plot(name):
     plt.ylabel('Depth')
     plt.xlabel('Price')
-    plt.show()
-    # Uncomment below to save chart
-    #plt.savefig('unified.png', bbox_inches='tight')
+    plt.savefig('%s.png'%(name), bbox_inches='tight')
+    plt.show()  
 
 def plot_and_show(name, prices, cumulative_depths):
     ax = create_plot(name)
     plot(ax, prices, cumulative_depths)
-    show_plot()
+    show_plot(name)
 
 
 ######### PARSING 0x API (FAKE RESPONSE) #########
 response_json = json.load(open('./raw'))
 sources = []
 for name,inouts in response_json['depth'].items():
+    if name == 'Balancer':
+        print(inouts)
+
     cum_output = 0.0
     depths = [Depth(0,0,0)]
     for inout in inouts:
@@ -69,8 +71,8 @@ def merge_and_sort(depths):
     merged_depths = []
     for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
         if merged_depths and merged_depths[-1].input == depth.input:
-            # print("Merging input=%f, cumoutput=%f with output=%f"%(merged_depths[-1].input, merged_depths[-1].cum_output, depth.cum_output))
-            merged_depths[-1] = Depth(merged_depths[-1].input, -1, merged_depths[-1].cum_output + depth.cum_output)
+            print("Merging input=%f, cumoutput=%f with output=%f"%(merged_depths[-1].input, merged_depths[-1].cum_output, depth.cum_output))
+            merged_depths[-1] = Depth(merged_depths[-1].input, -1, merged_depths[-1].cum_output + depth.output)
         else:
             merged_depths.append(depth)
     return merged_depths
@@ -101,9 +103,8 @@ def offset_from_unified(depths, unified_depths):
 # Prints an individual source
 def print_individual(sources):
     for source in sources:
-        if source.name == 'Balancer':
-            (prices, cumulative_depths) = depths_to_xy(merge_and_sort(source.depths))
-            plot_and_show(source.name, prices, cumulative_depths)
+        (prices, cumulative_depths) = depths_to_xy(merge_and_sort(source.depths))
+        plot_and_show(source.name, prices, cumulative_depths)
 
 # Prints the cumulative chart
 def print_cumulative(sources):
@@ -126,7 +127,6 @@ def print_unified(sources):
         unified_cumulative_depths += source.depths
         unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
 
-
     handles = []
     labels = []
     for single_plot in reversed(plots):
@@ -135,7 +135,7 @@ def print_unified(sources):
         labels.append(single_plot["name"])
 
     ax.legend(handles, labels)
-    show_plot()
+    show_plot('unified')
 
 #print_individual(sources)
 print_unified(sources)
