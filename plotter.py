@@ -8,14 +8,25 @@ from functools import cmp_to_key
 Depth = collections.namedtuple("Depth", ['input', 'output', 'cum_output']) # input:uint, output:uint, cum_output:uint
 Source = collections.namedtuple("Source", ['name', 'depths']) # depths:Depth[]
 
-def plot(name, prices, cumulative_depths):
+
+def create_plot(name):
     fig, ax = plt.subplots()
     ax.set_title(name)
+    return ax
+
+def plot(ax, prices, cumulative_depths):
     ax.fill_between(prices, 0, cumulative_depths)
+
+def show_plot():
     plt.ylabel('Depth')
     plt.xlabel('Price')
-    #plt.show()
-    plt.savefig('%s.png'%(name), bbox_inches='tight')
+    plt.show()
+    #plt.savefig('%s.png'%(name), bbox_inches='tight')
+
+def plot_and_show(name, prices, cumulative_depths):
+    ax = create_plot(name)
+    plot(ax, prices, cumulative_depths)
+    show_plot()
 
 # Fake response from 0x API
 '''
@@ -72,24 +83,61 @@ def merge_and_sort(depths):
     merged_depths = []
     for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
         if merged_depths and merged_depths[-1].input == depth.input:
-            print(merged_depths)
             merged_depths[-1] = Depth(merged_depths[-1].input, -1, merged_depths[-1].cum_output + depth.cum_output)
         else:
             merged_depths.append(depth)
 
     return merged_depths
 
+def get_cumulative_depths(sources):
+    cumulative_depths = [depth for source in sources for depth in source.depths]  
+    return merge_and_sort(cumulative_depths)
+
+def get_offset_from_unified_depth(cumulative_depths, source):
+    return 1
+
+def offset_from_unified(depths, unified_depths):
+    offset_depths = []
+    for depth in depths:
+        relevant_unified_depths = [unified_depth for unified_depth in unified_depths if unified_depth.input == depth.input]
+        if len(relevant_unified_depths) == 0:
+            offset_depths.append(depth)
+        elif len(relevant_unified_depths) == 1:
+            print("FOUND: %f+%f = %f"%(depth.cum_output, relevant_unified_depths[0].cum_output,depth.cum_output + relevant_unified_depths[0].cum_output))
+            offset_depths.append(Depth(depth.input, -1, depth.cum_output + relevant_unified_depths[0].cum_output))
+        else:
+            raise Exception("Unexpected; does not appear this unified depths list is merged & sorted")
+
+    return offset_depths
+
 def print_individual(sources):
     for source in sources:
         (prices, cumulative_depths) = depths_to_xy(merge_and_sort(source.depths))
-        plot(source.name, prices, cumulative_depths)
+        plot_and_show(source.name, prices, cumulative_depths)
+
+def print_cumulative(sources):
+    (prices, cumulative_depths) = depths_to_xy(get_cumulative_depths(get_cumulative_depths))  
+    plot_and_show("Cumulative", prices, cumulative_depths)
 
 def print_unified(sources):
-    cumulative_depths = [depth for source in sources for depth in source.depths]  
-    (prices, cumulative_depths) = depths_to_xy(merge_and_sort(cumulative_depths))  
-    plot("Cumulative", prices, cumulative_depths)
+    # Unlike the cumulative printer, we build the cumulative depth as we go!
+    unified_cumulative_depths = []
+    ax = create_plot("Unified")
+
+    for source in sources:
+        print("Adding ", source.name)
+        (prices, individual_cumulative_depths) = depths_to_xy(offset_from_unified(merge_and_sort(source.depths), unified_cumulative_depths))
+        plot(ax, prices, individual_cumulative_depths)
+
+        # Update unified cumulative depths
+        unified_cumulative_depths += source.depths
+        unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
+
+    show_plot()
 
 #print_unified(sources)
 
-print_individual(sources)
+#print_individual(sources)
+
+print_unified(sources)
     
