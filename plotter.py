@@ -124,14 +124,22 @@ def print_unified(sources):
     unified_cumulative_depths = []
     ax = create_plot("Unified")
 
+
+    plots = []
+
     for source in sources:
         print("Adding ", source.name)
         (prices, individual_cumulative_depths) = depths_to_xy(offset_from_unified(merge_and_sort(source.depths), unified_cumulative_depths))
-        plot(ax, prices, individual_cumulative_depths)
+        #plot(ax, prices, individual_cumulative_depths)
+        plots.append({"prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
 
         # Update unified cumulative depths
         unified_cumulative_depths += source.depths
         unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
+
+
+    for single_plot in reversed(plots):
+        plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])
 
     show_plot()
 
