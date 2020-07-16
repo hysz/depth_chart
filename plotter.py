@@ -11,6 +11,7 @@ from pprint import pprint
 ######### TYPES #########
 Depth = collections.namedtuple("Depth", ['bucket', 'value', 'price'])
 Source = collections.namedtuple("Source", ['name', 'depths'])
+BucketRange = collections.namedtuple("BucketRange", ['min', 'mid', 'max', 'raw'])
 
 ######### PARSE COMMAND LINE ARGS #########
 parser = argparse.ArgumentParser()
@@ -25,6 +26,9 @@ parser.add_argument("--file", help="file to read from, instead of hitting URL", 
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
 print(url)
+
+######### INIT #########
+BUCKET_RANGES = [BucketRange(0.0,0.0,0.0,[]) for i in range(0,int(args.samples) + 1)]
 
 ######### PLOTTING #########
 def gen_name(name):
@@ -50,7 +54,7 @@ def plot_and_show(name, prices, cumulative_depths):
     plot(ax, prices, cumulative_depths)
     show_plot(name)
 
-######### PARSING 0x API (FAKE RESPONSE) #########
+######### PARSING 0x API RESPONSE #########
 response_json = None
 if not args.file:
     response = requests.get(url)
@@ -60,6 +64,7 @@ if not args.file:
 else:
     response_json = json.load(open(args.file))
 
+######### GENERATE SOURCES #########
 sources = []
 for name,inouts in response_json['depth'].items():
     if args.sources != "" and not name.lower() in args.sources.lower():
@@ -67,9 +72,29 @@ for name,inouts in response_json['depth'].items():
     pprint(inouts)
     depths = []
     for inout in inouts:
-        depths.append(Depth(float(inout["bucket"]), float(inout["output"]), float(inout["price"])))
+        depth = Depth(float(inout["bucket"]), float(inout["output"]), float(inout["price"]))
+        depths.append(depth)
+
+        BUCKET_RANGES[int(depth.bucket)] = BucketRange(0.0,0.0,0.0,BUCKET_RANGES[int(depth.bucket)].raw + [float(depth.price)])
     sources.append(Source(name, depths))
   
+######### COMPUTE BUCKET RANGES #########
+for i,raw_bucket_range in enumerate(BUCKET_RANGES):
+    min = sys.float_info.max
+    mid = 0.0
+    max = 0.0
+
+    for price in raw_bucket_range.raw:
+        if price < min:
+            min = price
+        if price > max:
+            max = price
+
+    mid = (min + max) / 2.
+    BUCKET_RANGES[i] = BucketRange(min, mid, max, raw_bucket_range.raw)
+
+print(BUCKET_RANGES)
+sys.exit(0)
 
 ######### ALGOS #########
 # Convert an array of Depth[] to (prices[], cumulative_depths[])
