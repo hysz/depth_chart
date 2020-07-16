@@ -126,7 +126,7 @@ def get_interpolated(depths):
 
     # add remaining buckets from [last_bucket..<args.samples>]
     (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
-    for bucket in range(next_bucket, int(args.samples)):
+    for bucket in range(next_bucket, int(args.samples) + 1):
         interpolated_depths.append(Depth(bucket, value_of_next_bucket))
 
     # add buckets from [0..first_bucket]
@@ -134,7 +134,7 @@ def get_interpolated(depths):
     for bucket in reversed(range(0, first_bucket)):
         interpolated_depths.insert(0, Depth(bucket,0))
 
-    print(interpolated_depths)
+    print("INTERPOLATED\n: ", interpolated_depths)
     return interpolated_depths
 
 def is_reverse_sorted(depths):
