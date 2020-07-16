@@ -15,13 +15,14 @@ def create_plot(name):
     return ax
 
 def plot(ax, prices, cumulative_depths):
-    ax.fill_between(prices, 0, cumulative_depths)
+    handle = ax.fill_between(prices, 0, cumulative_depths)
+    return handle
 
 def show_plot():
     plt.ylabel('Depth')
     plt.xlabel('Price')
     plt.show()
-    #plt.savefig('%s.png'%(name), bbox_inches='tight')
+    plt.savefig('unified.png', bbox_inches='tight')
 
 def plot_and_show(name, prices, cumulative_depths):
     ax = create_plot(name)
@@ -131,16 +132,21 @@ def print_unified(sources):
         print("Adding ", source.name)
         (prices, individual_cumulative_depths) = depths_to_xy(offset_from_unified(merge_and_sort(source.depths), unified_cumulative_depths))
         #plot(ax, prices, individual_cumulative_depths)
-        plots.append({"prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
+        plots.append({"name": source.name, "prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
 
         # Update unified cumulative depths
         unified_cumulative_depths += source.depths
         unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
 
 
+    handles = []
+    labels = []
     for single_plot in reversed(plots):
-        plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])
+        handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])
+        handles.append(handle)
+        labels.append(single_plot["name"])
 
+    ax.legend(handles, labels)
     show_plot()
 
 #print_unified(sources)
