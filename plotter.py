@@ -8,30 +8,8 @@ import requests
 
 
 ######### TYPES #########
-Depth = collections.namedtuple("Depth", ['input', 'output', 'cum_output']) # input:uint, output:uint, cum_output:uint
+Depth = collections.namedtuple("Depth", ['input', 'output']) # input:uint, output:uint
 Source = collections.namedtuple("Source", ['name', 'depths']) # depths:Depth[]
-
-
-######### PLOTTING #########
-def create_plot(name):
-    fig, ax = plt.subplots()
-    ax.set_title(name)
-    return ax
-
-def plot(ax, prices, cumulative_depths):
-    handle = ax.fill_between(prices, 0, cumulative_depths)
-    return handle
-
-def show_plot(name):
-    plt.ylabel('Depth')
-    plt.xlabel('Price')
-    plt.savefig('%s.png'%(name), bbox_inches='tight')
-    plt.show()  
-
-def plot_and_show(name, prices, cumulative_depths):
-    ax = create_plot(name)
-    plot(ax, prices, cumulative_depths)
-    show_plot(name)
 
 ######### PARSE COMMAND LINE ARGS #########
 parser = argparse.ArgumentParser()
@@ -42,18 +20,37 @@ parser.add_argument("--samples", help="number of samples", type=str, default='5'
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s'%(args.buy, args.sell, args.sell_amount, args.samples)
 
+######### PLOTTING #########
+def gen_name(name):
+    return "%s-%s_%s (%de18, %s samples)"%(args.buy, args.sell, name, int(args.sell_amount) / pow(10,18), args.samples)
+
+def create_plot(name):
+    fig, ax = plt.subplots()
+    ax.set_title(gen_name(name))
+    return ax
+
+def plot(ax, prices, cumulative_depths):
+    handle = ax.fill_between(prices, 0, cumulative_depths)
+    return handle
+
+def show_plot(name):
+    plt.ylabel('Output')
+    plt.xlabel('Input')
+    plt.savefig('%s.png'%(gen_name(name)), bbox_inches='tight')
+    plt.show()  
+
+def plot_and_show(name, prices, cumulative_depths):
+    ax = create_plot(name)
+    plot(ax, prices, cumulative_depths)
+    show_plot(name)
+
 ######### PARSING 0x API (FAKE RESPONSE) #########
 response_json = json.loads(requests.get(url).content)
 sources = []
 for name,inouts in response_json['depth'].items():
-    if name == 'Balancer':
-        print(inouts)
-
-    cum_output = 0.0
-    depths = [Depth(0,0,0)]
+    depths = [Depth(0,0)]
     for inout in inouts:
-        depths.append(Depth(float(inout["input"]), float(inout["output"]), float(inout["output"]) + cum_output))
-        cum_output += float(inout["output"])
+        depths.append(Depth(float(inout["input"]), float(inout["output"])))
     sources.append(Source(name, depths))
   
 
@@ -65,7 +62,7 @@ def depths_to_xy(depths):
     cumulative_depths = []
     for depth in depths:
         prices.append(depth.input)
-        cumulative_depths.append(depth.cum_output)
+        cumulative_depths.append(depth.output)
     return (prices, cumulative_depths)
 
 # Compares two depths, used for sorting by price (low-to-high)
@@ -82,8 +79,7 @@ def merge_and_sort(depths):
     merged_depths = []
     for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
         if merged_depths and merged_depths[-1].input == depth.input:
-            print("Merging input=%f, cumoutput=%f with output=%f"%(merged_depths[-1].input, merged_depths[-1].cum_output, depth.cum_output))
-            merged_depths[-1] = Depth(merged_depths[-1].input, -1, merged_depths[-1].cum_output + depth.output)
+            merged_depths[-1] = Depth(merged_depths[-1].input, merged_depths[-1].output + depth.output)
         else:
             merged_depths.append(depth)
     return merged_depths
@@ -104,8 +100,7 @@ def offset_from_unified(depths, unified_depths):
         if len(relevant_unified_depths) == 0:
             offset_depths.append(depth)
         elif len(relevant_unified_depths) == 1:
-            print("FOUND: %f+%f = %f"%(depth.cum_output, relevant_unified_depths[0].cum_output,depth.cum_output + relevant_unified_depths[0].cum_output))
-            offset_depths.append(Depth(depth.input, -1, depth.cum_output + relevant_unified_depths[0].cum_output))
+            offset_depths.append(Depth(depth.input, depth.output + relevant_unified_depths[0].output))
         else:
             raise Exception("Unexpected; does not appear this unified depths list is merged & sorted")
 
