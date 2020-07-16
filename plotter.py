@@ -5,10 +5,11 @@ import sys
 from functools import cmp_to_key
 import argparse
 import requests
+from pprint import pprint
 
 
 ######### TYPES #########
-Depth = collections.namedtuple("Depth", ['bucket', 'value'])
+Depth = collections.namedtuple("Depth", ['bucket', 'value', 'price'])
 Source = collections.namedtuple("Source", ['name', 'depths'])
 
 ######### PARSE COMMAND LINE ARGS #########
@@ -40,7 +41,7 @@ def plot(ax, prices, cumulative_depths, color = None):
 
 def show_plot(name):
     plt.ylabel('Value')
-    plt.xlabel('Bucket')
+    plt.xlabel('Price')
     plt.savefig('%s.png'%(gen_name(name)), bbox_inches='tight')
     plt.show()  
 
@@ -63,11 +64,11 @@ sources = []
 for name,inouts in response_json['depth'].items():
     if args.sources != "" and not name.lower() in args.sources.lower():
         continue
-    depths = [Depth(0,0)]
+    pprint(inouts)
+    depths = []
     for inout in inouts:
-        depths.append(Depth(float(inout["bucket"]), float(inout["output"])))
+        depths.append(Depth(float(inout["bucket"]), float(inout["output"]), float(inout["price"])))
     sources.append(Source(name, depths))
-# print(sources)
   
 
 ######### ALGOS #########
@@ -77,6 +78,7 @@ def depths_to_xy(depths):
     prices = []
     cumulative_depths = []
     for depth in depths:
+        #prices.append(-depth.price)
         prices.append(depth.bucket)
         cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
@@ -95,7 +97,8 @@ def merge_and_sort(depths):
     merged_depths = []
     for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
         if merged_depths and merged_depths[-1].bucket == depth.bucket:
-            merged_depths[-1] = Depth(merged_depths[-1].bucket, merged_depths[-1].value + depth.value)
+            print("Merging ", depth.bucket)
+            merged_depths[-1] = Depth(merged_depths[-1].bucket, merged_depths[-1].value + depth.value, (merged_depths[-1].price + depth.price) / 2)
         else:
             merged_depths.append(depth)
     return merged_depths
@@ -119,20 +122,24 @@ def get_interpolated(depths):
         # interpolate
         step = (depths[i].value - depths[i-1].value) / (depths[i].bucket - depths[i-1].bucket)
         cur_depth = float(depths[i-1].value + step)
+        price_step = (depths[i].price - depths[i-1].price) / (depths[i].bucket - depths[i-1].bucket)
+        print(price_step)
+        cur_price = float(depths[i-1].price + price_step)
         for bucket in range(int(depths[i-1].bucket) + 1, int(depths[i].bucket)):
-            interpolated_depths.append(Depth(bucket, cur_depth))
+            interpolated_depths.append(Depth(bucket, cur_depth, cur_price))
             cur_depth += step
+            cur_price += price_step
         interpolated_depths.append(depth)
 
     # add remaining buckets from [last_bucket..<args.samples>]
-    (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
+    (next_bucket, value_of_next_bucket, price_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value, interpolated_depths[-1].price) if interpolated_depths else (0, 0, 0)
     for bucket in range(next_bucket, int(args.samples) + 1):
-        interpolated_depths.append(Depth(bucket, value_of_next_bucket))
+        interpolated_depths.append(Depth(bucket, value_of_next_bucket, price_of_next_bucket))
 
     # add buckets from [0..first_bucket]
     first_bucket = int(interpolated_depths[0].bucket)
     for bucket in reversed(range(0, first_bucket)):
-        interpolated_depths.insert(0, Depth(bucket,0))
+        interpolated_depths.insert(0, Depth(bucket,0,0))
 
     return interpolated_depths
 
@@ -160,13 +167,14 @@ def offset_from_unified(depths, unified_depths):
             # Find 
             offset_depths.append(depth)
         else:
-            offset_depths.append(Depth(depth.bucket, depth.value + relevant_unified_depths[0].value))
+            offset_depths.append(Depth(depth.bucket, depth.value + relevant_unified_depths[0].value, depth.price))
 
     return offset_depths
 
 # Prints an individual source
 def print_individual(sources):
     for source in sources:
+        #sanitized_depths = get_interpolated(merge_and_sort(source.depths))
         sanitized_depths = get_interpolated(merge_and_sort(source.depths))
         (prices, cumulative_depths) = depths_to_xy(sanitized_depths)
         plot_and_show(source.name, prices, cumulative_depths)
@@ -190,8 +198,6 @@ def print_unified(sources):
         plots.append({"name": source.name, "prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
 
         # Update unified cumulative depths
-        #unified_cumulative_depths += sanitized_depths
-        #unified_cumulative_depths = merge_and_sort(unified_cumulative_depths)
         unified_cumulative_depths = sanitized_depths
  
 
