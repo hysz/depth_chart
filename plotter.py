@@ -124,9 +124,10 @@ def get_interpolated(depths):
             cur_depth += step
         interpolated_depths.append(depth)
 
-    # add remaining buckets up to 100
-    for bucket in range(int(interpolated_depths[-1].bucket) + 1, 100):
-        interpolated_depths.append(Depth(bucket, interpolated_depths[-1].value))
+    # add remaining buckets up to <args.samples>
+    (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
+    for bucket in range(next_bucket, int(args.samples)):
+        interpolated_depths.append(Depth(bucket, value_of_next_bucket))
 
     return interpolated_depths
 
