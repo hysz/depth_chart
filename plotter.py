@@ -30,7 +30,7 @@ def create_plot(name):
     return ax
 
 def plot(ax, prices, cumulative_depths, color = None):
-    handle = ax.fill_between(prices, 0, cumulative_depths, color=color)
+    handle = ax.fill_between(prices, 0, cumulative_depths)
     return handle
 
 def show_plot(name):
