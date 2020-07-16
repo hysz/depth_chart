@@ -17,8 +17,11 @@ parser.add_argument("--buy", help="buy token", type=str, required=True)
 parser.add_argument("--sell", help="sell token", type=str, required=True)
 parser.add_argument("--sell-amount", help="amount to sell", type=str, default='50000000000000000000000')
 parser.add_argument("--samples", help="number of samples", type=str, default='5')
+parser.add_argument("--distribution", help="sample distribution base", type=str, default='1')
+parser.add_argument("--plot", help="what to plot [unified|individual]", type=str, default='unified')
 args = parser.parse_args()
-url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s'%(args.buy, args.sell, args.sell_amount, args.samples)
+url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
+
 
 ######### PLOTTING #########
 def gen_name(name):
@@ -148,6 +151,8 @@ def print_unified(sources):
     ax.legend(handles, labels)
     show_plot('unified')
 
-#print_individual(sources)
-print_unified(sources)
+if args.plot == 'individual':
+    print_individual(sources)
+else:
+    print_unified(sources)
     
