@@ -29,8 +29,8 @@ def create_plot(name):
     ax.set_title(gen_name(name))
     return ax
 
-def plot(ax, prices, cumulative_depths):
-    handle = ax.fill_between(prices, 0, cumulative_depths)
+def plot(ax, prices, cumulative_depths, color = None):
+    handle = ax.fill_between(prices, 0, cumulative_depths, color=color)
     return handle
 
 def show_plot(name):
@@ -137,8 +137,11 @@ def print_unified(sources):
 
     handles = []
     labels = []
+    color_idx = 0
+    #colors = ["#6262A6", "#181632", "#25CD2C", "#FB4C5A", "#5C51FE"]
     for single_plot in reversed(plots):
-        handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])
+        handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])#, colors[color_idx])
+        color_idx = (color_idx + 1)%len(colors)
         handles.append(handle)
         labels.append(single_plot["name"])
 
