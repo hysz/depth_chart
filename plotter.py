@@ -8,8 +8,8 @@ import requests
 
 
 ######### TYPES #########
-Depth = collections.namedtuple("Depth", ['input', 'output']) # input:uint, output:uint
-Source = collections.namedtuple("Source", ['name', 'depths']) # depths:Depth[]
+Depth = collections.namedtuple("Depth", ['bucket', 'value'])
+Source = collections.namedtuple("Source", ['name', 'depths'])
 
 ######### PARSE COMMAND LINE ARGS #########
 parser = argparse.ArgumentParser()
@@ -34,8 +34,8 @@ def plot(ax, prices, cumulative_depths, color = None):
     return handle
 
 def show_plot(name):
-    plt.ylabel('Output')
-    plt.xlabel('Input')
+    plt.ylabel('Value')
+    plt.xlabel('Bucket')
     plt.savefig('%s.png'%(gen_name(name)), bbox_inches='tight')
     plt.show()  
 
@@ -52,7 +52,7 @@ sources = []
 for name,inouts in response_json['depth'].items():
     depths = [Depth(0,0)]
     for inout in inouts:
-        depths.append(Depth(float(inout["input"]), float(inout["output"])))
+        depths.append(Depth(float(inout["bucket"]), float(inout["output"])))
     sources.append(Source(name, depths))
   
 
@@ -63,25 +63,25 @@ def depths_to_xy(depths):
     prices = []
     cumulative_depths = []
     for depth in depths:
-        prices.append(depth.input)
-        cumulative_depths.append(depth.output)
+        prices.append(depth.bucket)
+        cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
 
 # Compares two depths, used for sorting by price (low-to-high)
 def compare_depths(d1, d2):
-    if d1.input < d2.input:
+    if d1.bucket < d2.bucket:
         return -1
-    elif d1.input > d2.input:
+    elif d1.bucket > d2.bucket:
         return 1
     else:
         return 0
 
-# Sorts input Depth[] and then merges instances that have the same cumulative output.
+# Sorts input Depth[] and then merges instances that have the same cumulative depth.
 def merge_and_sort(depths):
     merged_depths = []
     for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
-        if merged_depths and merged_depths[-1].input == depth.input:
-            merged_depths[-1] = Depth(merged_depths[-1].input, merged_depths[-1].output + depth.output)
+        if merged_depths and merged_depths[-1].bucket == depth.bucket:
+            merged_depths[-1] = Depth(merged_depths[-1].bucket, merged_depths[-1].value + depth.value)
         else:
             merged_depths.append(depth)
     return merged_depths
@@ -92,17 +92,17 @@ def get_unified_depths(sources):
     cumulative_depths = [depth for source in sources for depth in source.depths]  
     return merge_and_sort(unified_depths)
 
-# Returns an array of Depth[] where each cumulative output is offset from `unified_depths`.
+# Returns an array of Depth[] where each cumulative depth is offset from `unified_depths`.
 # So, if unified_depths has an entry of 10 at price=1, then the offset_depth will
 # add 10 to its value at price=1. This is how we create the rainbow effect.
 def offset_from_unified(depths, unified_depths):
     offset_depths = []
     for depth in depths:
-        relevant_unified_depths = [unified_depth for unified_depth in unified_depths if unified_depth.input == depth.input]
+        relevant_unified_depths = [unified_depth for unified_depth in unified_depths if unified_depth.bucket == depth.bucket]
         if len(relevant_unified_depths) == 0:
             offset_depths.append(depth)
         elif len(relevant_unified_depths) == 1:
-            offset_depths.append(Depth(depth.input, depth.output + relevant_unified_depths[0].output))
+            offset_depths.append(Depth(depth.bucket, depth.value + relevant_unified_depths[0].value))
         else:
             raise Exception("Unexpected; does not appear this unified depths list is merged & sorted")
 
