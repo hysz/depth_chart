@@ -3,6 +3,9 @@ import collections
 import json
 import sys
 from functools import cmp_to_key
+import argparse
+import requests
+
 
 ######### TYPES #########
 Depth = collections.namedtuple("Depth", ['input', 'output', 'cum_output']) # input:uint, output:uint, cum_output:uint
@@ -30,9 +33,14 @@ def plot_and_show(name, prices, cumulative_depths):
     plot(ax, prices, cumulative_depths)
     show_plot(name)
 
+######### PARSE COMMAND LINE ARGS #########
+parser = argparse.ArgumentParser()
+parser.add_argument("--url", help="url", type=str)
+args = parser.parse_args()
+url = args.url
 
 ######### PARSING 0x API (FAKE RESPONSE) #########
-response_json = json.load(open('./raw'))
+response_json = json.loads(requests.get(url).content)
 sources = []
 for name,inouts in response_json['depth'].items():
     if name == 'Balancer':
