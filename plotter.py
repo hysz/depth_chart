@@ -18,14 +18,15 @@ BucketRange = collections.namedtuple("BucketRange", ['min', 'mid', 'max', 'raw']
 parser = argparse.ArgumentParser()
 parser.add_argument("--buy", help="buy token", type=str, required=True)
 parser.add_argument("--sell", help="sell token", type=str, required=True)
-parser.add_argument("--sell-amount", help="amount to sell", type=str, default='50000000000000000000000')
+parser.add_argument("--sell-amount", help="amount to sell", type=str, default='50000')
 parser.add_argument("--samples", help="number of samples", type=str, default='5')
 parser.add_argument("--distribution", help="sample distribution base", type=str, default='1')
 parser.add_argument("--plot", help="what to plot [unified|individual|both]", type=str, default='unified')
 parser.add_argument("--sources", help="source1,source2,source3,...", type=str, default="")
 parser.add_argument("--file", help="file to read from, instead of hitting URL", type=str, default="")
+parser.add_argument("--x-axis", help="bucket|price", type=str, default="price")
 args = parser.parse_args()
-url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
+url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, int(args.sell_amount) * pow(10,18), args.samples, args.distribution)
 print(url)
 
 ######### INIT #########
@@ -36,7 +37,7 @@ PRICE_STEP = 0
 
 ######### PLOTTING #########
 def gen_name(name):
-    return "%s-%s_%s (%de18, %s samples)"%(args.buy, args.sell, name, int(args.sell_amount) / pow(10,18), args.samples)
+    return "%s-%s_%s (%de18, %s samples)"%(args.buy, args.sell, name, int(args.sell_amount), args.samples)
 
 def create_plot(name):
     fig, ax = plt.subplots()
@@ -48,8 +49,8 @@ def plot(ax, prices, cumulative_depths, color = None):
     return handle
 
 def show_plot(name):
-    plt.ylabel('Value')
-    plt.xlabel('Price')
+    plt.ylabel('depth')
+    plt.xlabel(args.x_axis)
     plt.savefig('%s.png'%(gen_name(name)), bbox_inches='tight')
     plt.show()  
 
@@ -106,7 +107,6 @@ for i,raw_bucket_range in enumerate(BUCKET_RANGES):
 ######### INTERPOLATE BUCKET RANGES #########
 bucket_price_step = 0
 for i,bucket_range in enumerate(BUCKET_RANGES):
-    print("%f"%(bucket_price_step))
     if i == 0:
         continue
     
@@ -136,10 +136,6 @@ for i,bucket_range in enumerate(BUCKET_RANGES):
         []
     )
 
-#pprint(BUCKET_RANGES[3])
-pprint(BUCKET_RANGES)
-#sys.exit(0)
-
 ######### ALGOS #########
 # Convert an array of Depth[] to (prices[], cumulative_depths[])
 # This output gets plotted, with prices on the x-axis and cumulative-depths on the y-axis.
@@ -147,8 +143,10 @@ def depths_to_xy(depths):
     prices = []
     cumulative_depths = []
     for depth in depths:
-        prices.append(BUCKET_RANGES[int(depth.bucket)].mid)
-        #prices.append(depth.bucket)
+        if args.x_axis == "price":
+            prices.append(BUCKET_RANGES[int(depth.bucket)].mid)
+        else:
+            prices.append(depth.bucket)
         cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
 
