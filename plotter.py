@@ -19,6 +19,7 @@ parser.add_argument("--sell-amount", help="amount to sell", type=str, default='5
 parser.add_argument("--samples", help="number of samples", type=str, default='5')
 parser.add_argument("--distribution", help="sample distribution base", type=str, default='1')
 parser.add_argument("--plot", help="what to plot [unified|individual]", type=str, default='unified')
+parser.add_argument("--sources", help="source1,source2,source3,...", type=str, default="")
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
 
@@ -53,6 +54,8 @@ response.raise_for_status()
 response_json = json.loads(response.content)
 sources = []
 for name,inouts in response_json['depth'].items():
+    if args.sources != "" and not name.lower() in args.sources.lower():
+        continue
     depths = [Depth(0,0)]
     for inout in inouts:
         depths.append(Depth(float(inout["bucket"]), float(inout["output"])))
