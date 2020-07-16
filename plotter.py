@@ -6,6 +6,7 @@ from functools import cmp_to_key
 import argparse
 import requests
 from pprint import pprint
+import statistics
 
 
 ######### TYPES #########
@@ -29,6 +30,9 @@ print(url)
 
 ######### INIT #########
 BUCKET_RANGES = [BucketRange(0.0,0.0,0.0,[]) for i in range(0,int(args.samples) + 1)]
+MIN_PRICE = sys.float_info.max
+MAX_PRICE = 0
+PRICE_STEP = 0
 
 ######### PLOTTING #########
 def gen_name(name):
@@ -90,11 +94,51 @@ for i,raw_bucket_range in enumerate(BUCKET_RANGES):
         if price > max:
             max = price
 
-    mid = (min + max) / 2.
+    if raw_bucket_range.raw:
+        mid = statistics.mean(raw_bucket_range.raw)
+        if mid < MIN_PRICE:
+            MIN_PRICE = mid
+        if mid > MAX_PRICE:
+            MAX_PRICE = mid
+
     BUCKET_RANGES[i] = BucketRange(min, mid, max, raw_bucket_range.raw)
 
-print(BUCKET_RANGES)
-sys.exit(0)
+######### INTERPOLATE BUCKET RANGES #########
+bucket_price_step = 0
+for i,bucket_range in enumerate(BUCKET_RANGES):
+    print("%f"%(bucket_price_step))
+    if i == 0:
+        continue
+    
+    # Already have a range
+    if bucket_range.raw:
+        bucket_price_step = 0
+        continue
+
+
+    # Compute price step to next valid
+    if bucket_price_step == 0:
+        for j in range(i+1, len(BUCKET_RANGES)):
+            if BUCKET_RANGES[j].raw:
+                bucket_price_step = (BUCKET_RANGES[j].mid - BUCKET_RANGES[i-1].mid) / (j - i + 1)
+                print("FOUND: %f"%(bucket_price_step))
+                break
+
+    # Could not find a future non-empty bucket
+    if bucket_price_step == 0:
+        bucket_price_step = (MAX_PRICE - MIN_PRICE) / float(args.samples)
+
+    last_bucket_range = BUCKET_RANGES[i-1]
+    BUCKET_RANGES[i] = BucketRange(
+        last_bucket_range.min + bucket_price_step,
+        last_bucket_range.mid + bucket_price_step,
+        last_bucket_range.max + bucket_price_step,
+        []
+    )
+
+#pprint(BUCKET_RANGES[3])
+pprint(BUCKET_RANGES)
+#sys.exit(0)
 
 ######### ALGOS #########
 # Convert an array of Depth[] to (prices[], cumulative_depths[])
@@ -103,8 +147,8 @@ def depths_to_xy(depths):
     prices = []
     cumulative_depths = []
     for depth in depths:
-        #prices.append(-depth.price)
-        prices.append(depth.bucket)
+        prices.append(depth.price)
+        #prices.append(depth.bucket)
         cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
 
@@ -148,7 +192,6 @@ def get_interpolated(depths):
         step = (depths[i].value - depths[i-1].value) / (depths[i].bucket - depths[i-1].bucket)
         cur_depth = float(depths[i-1].value + step)
         price_step = (depths[i].price - depths[i-1].price) / (depths[i].bucket - depths[i-1].bucket)
-        print(price_step)
         cur_price = float(depths[i-1].price + price_step)
         for bucket in range(int(depths[i-1].bucket) + 1, int(depths[i].bucket)):
             interpolated_depths.append(Depth(bucket, cur_depth, cur_price))
@@ -157,14 +200,14 @@ def get_interpolated(depths):
         interpolated_depths.append(depth)
 
     # add remaining buckets from [last_bucket..<args.samples>]
-    (next_bucket, value_of_next_bucket, price_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value, interpolated_depths[-1].price) if interpolated_depths else (0, 0, 0)
+    (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
     for bucket in range(next_bucket, int(args.samples) + 1):
-        interpolated_depths.append(Depth(bucket, value_of_next_bucket, price_of_next_bucket))
+        interpolated_depths.append(Depth(bucket, value_of_next_bucket, BUCKET_RANGES[bucket].max))
 
     # add buckets from [0..first_bucket]
     first_bucket = int(interpolated_depths[0].bucket)
     for bucket in reversed(range(0, first_bucket)):
-        interpolated_depths.insert(0, Depth(bucket,0,0))
+        interpolated_depths.insert(0, Depth(bucket,0, BUCKET_RANGES[bucket].min))
 
     return interpolated_depths
 
