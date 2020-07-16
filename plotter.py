@@ -124,11 +124,17 @@ def get_interpolated(depths):
             cur_depth += step
         interpolated_depths.append(depth)
 
-    # add remaining buckets up to <args.samples>
+    # add remaining buckets from [last_bucket..<args.samples>]
     (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
     for bucket in range(next_bucket, int(args.samples)):
         interpolated_depths.append(Depth(bucket, value_of_next_bucket))
 
+    # add buckets from [0..first_bucket]
+    first_bucket = int(interpolated_depths[0].bucket)
+    for bucket in reversed(range(0, first_bucket)):
+        interpolated_depths.insert(0, Depth(bucket,0))
+
+    print(interpolated_depths)
     return interpolated_depths
 
 def is_reverse_sorted(depths):
@@ -149,10 +155,7 @@ def offset_from_unified(depths, unified_depths):
         relevant_unified_depths = [unified_depth for unified_depth in reversed(unified_depths) if unified_depth.bucket <= depth.bucket]
 
         if not is_reverse_sorted(relevant_unified_depths):
-            print('naaaaaha')
-            print(relevant_unified_depths)
-            raise Exception("NOt reverse sorted")
-        print(relevant_unified_depths)
+            raise Exception("Not reverse sorted")
         #print([bucket for depth.bucket in relevant_unified_depths])
         if len(relevant_unified_depths) == 0:
             # Find 
