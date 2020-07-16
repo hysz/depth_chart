@@ -147,7 +147,7 @@ def depths_to_xy(depths):
     prices = []
     cumulative_depths = []
     for depth in depths:
-        prices.append(depth.price)
+        prices.append(BUCKET_RANGES[int(depth.bucket)].mid)
         #prices.append(depth.bucket)
         cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
