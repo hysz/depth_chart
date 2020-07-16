@@ -2,8 +2,16 @@ import matplotlib.pyplot as plt
 import collections
 
 # Types
-Depth = collections.namedtuple("Depth", ['input', 'output']) # input:uint, output:uint
-Source = collections.namedtuple("Source", ['depths']) # depths:Depth[]
+Depth = collections.namedtuple("Depth", ['input', 'output', 'cum_output']) # input:uint, output:uint, cum_output:uint
+Source = collections.namedtuple("Source", ['name', 'depths']) # depths:Depth[]
+
+def plot(name, prices, cumulative_depths):
+    fig, ax = plt.subplots()
+    ax.set_title(name)
+    ax.fill_between(prices, 0, cumulative_depths)
+    plt.ylabel('Depth')
+    plt.xlabel('Price')
+    plt.show()
 
 # Fake response from 0x API
 responseJson = {
@@ -12,15 +20,25 @@ responseJson = {
     "0x": [{"input": 123, "output": 456}, {"input": 124, "output": 10}, {"input": 125, "output": 4}]
 }
 
+# Parse out sources
+sources = []
+for name,inouts in responseJson.items():
+    cum_output = 0
+    depths = [Depth(0,0,0)]
+    for inout in inouts:
+        depths.append(Depth(inout["input"], inout["output"], inout["output"] + cum_output))
+        cum_output += inout["output"]
+    sources.append(Source(name, depths))
+  
+# print(sources)
 
 
-
-# Show chart
-
-fig, ax = plt.subplots()
-ax.fill_between([0, 123, 124, 125], 0, [0, 234, 458, 4])
-ax.fill_between([0, 100, 140, 180], 0, [0, 100, 200, 4])
-plt.ylabel('Depth')
-plt.xlabel('Sources')
-plt.show()
+for source in sources:
+    prices = []
+    cumulative_depths = []
+    for depth in source.depths:
+        prices.append(depth.input)
+        cumulative_depths.append(depth.cum_output)
+    plot(source.name, prices, cumulative_depths)
+    
 
