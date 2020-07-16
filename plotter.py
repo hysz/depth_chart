@@ -16,7 +16,10 @@ responseJson = {
 
 
 # Show chart
-plt.plot([0, 123, 124, 125], [0, 234, 458, 4])
+
+fig, ax = plt.subplots()
+ax.fill_between([0, 123, 124, 125], 0, [0, 234, 458, 4])
+ax.fill_between([0, 100, 140, 180], 0, [0, 100, 200, 4])
 plt.ylabel('Depth')
 plt.xlabel('Sources')
 plt.show()
