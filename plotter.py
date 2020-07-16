@@ -23,7 +23,7 @@ parser.add_argument("--sources", help="source1,source2,source3,...", type=str, d
 parser.add_argument("--file", help="file to read from, instead of hitting URL", type=str, default="")
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, args.sell_amount, args.samples, args.distribution)
-
+print(url)
 
 ######### PLOTTING #########
 def gen_name(name):
@@ -67,7 +67,7 @@ for name,inouts in response_json['depth'].items():
     for inout in inouts:
         depths.append(Depth(float(inout["bucket"]), float(inout["output"])))
     sources.append(Source(name, depths))
-print(sources)
+# print(sources)
   
 
 ######### ALGOS #########
@@ -134,7 +134,6 @@ def get_interpolated(depths):
     for bucket in reversed(range(0, first_bucket)):
         interpolated_depths.insert(0, Depth(bucket,0))
 
-    print("INTERPOLATED\n: ", interpolated_depths)
     return interpolated_depths
 
 def is_reverse_sorted(depths):
