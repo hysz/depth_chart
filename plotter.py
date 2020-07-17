@@ -25,6 +25,7 @@ parser.add_argument("--plot", help="what to plot [unified|individual|both]", typ
 parser.add_argument("--sources", help="source1,source2,source3,...", type=str, default="")
 parser.add_argument("--file", help="file to read from, instead of hitting URL", type=str, default="")
 parser.add_argument("--x-axis", help="bucket|price", type=str, default="price")
+parser.add_argument("--side", help="buy|sell", type=str, default="buy")
 args = parser.parse_args()
 url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sellAmount=%s&numSamples=%s&sampleDistributionBase=%s'%(args.buy, args.sell, int(args.sell_amount) * pow(10,18), args.samples, args.distribution)
 print(url)
@@ -69,8 +70,34 @@ if not args.file:
 else:
     response_json = json.load(open(args.file))
 
+
+
 ######### GENERATE SOURCES #########
 sources = []
+depths_by_source_name = {}
+
+MAX_BUCKET = 0
+for bucket, data_by_bucket_price in enumerate(response_json[args.side]['dataByBucketPrice']):
+    for source_name in data_by_bucket_price.keys():
+        if args.sources != "" and not source_name.lower() in args.sources.lower():
+            continue
+        elif source_name == "cumulative":
+            continue
+
+        if not source_name in depths_by_source_name:
+            depths_by_source_name[source_name] = []
+        
+        depths_by_source_name[source_name].append(Depth(float(bucket), float(data_by_bucket_price[source_name]), float(data_by_bucket_price["price"])))
+    
+    BUCKET_RANGES[int(bucket)] = BucketRange(float(data_by_bucket_price["price"]),float(data_by_bucket_price["price"]),float(data_by_bucket_price["price"]),[float(data_by_bucket_price["price"])])
+    MAX_BUCKET = bucket
+
+sources = [Source(name, depths_by_source_name[name]) for name in depths_by_source_name.keys()]
+
+#print(response_json['buy']['dataByBucketPrice'][0].keys())
+#sys.exit(0)
+
+'''
 for name,inouts in response_json['depth'].items():
     if args.sources != "" and not name.lower() in args.sources.lower():
         continue
@@ -82,6 +109,7 @@ for name,inouts in response_json['depth'].items():
 
         BUCKET_RANGES[int(depth.bucket)] = BucketRange(0.0,0.0,0.0,BUCKET_RANGES[int(depth.bucket)].raw + [float(depth.price)])
     sources.append(Source(name, depths))
+'''
   
 ######### COMPUTE BUCKET RANGES #########
 for i,raw_bucket_range in enumerate(BUCKET_RANGES):
@@ -126,7 +154,7 @@ for i,bucket_range in enumerate(BUCKET_RANGES):
 
     # Could not find a future non-empty bucket
     if bucket_price_step == 0:
-        bucket_price_step = (MAX_PRICE - MIN_PRICE) / float(args.samples)
+        bucket_price_step = (MAX_PRICE - MIN_PRICE) / float(MAX_BUCKET)
 
     last_bucket_range = BUCKET_RANGES[i-1]
     BUCKET_RANGES[i] = BucketRange(
@@ -197,9 +225,9 @@ def get_interpolated(depths):
             cur_price += price_step
         interpolated_depths.append(depth)
 
-    # add remaining buckets from [last_bucket..<args.samples>]
+    # add remaining buckets from [last_bucket..<MAX_BUCKET>]
     (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
-    for bucket in range(next_bucket, int(args.samples) + 1):
+    for bucket in range(next_bucket, int(MAX_BUCKET) + 1):
         interpolated_depths.append(Depth(bucket, value_of_next_bucket, BUCKET_RANGES[bucket].max))
 
     # add buckets from [0..first_bucket]
