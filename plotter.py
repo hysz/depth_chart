@@ -31,7 +31,6 @@ url = 'https://02b23f2b8271.ngrok.io/swap/v0/depth?buyToken=%s&sellToken=%s&sell
 print(url)
 
 ######### INIT #########
-BUCKET_RANGES = [BucketRange(0.0,0.0,0.0,[]) for i in range(0,int(args.samples) + 1)]
 MIN_PRICE = sys.float_info.max
 MAX_PRICE = 0
 PRICE_STEP = 0
@@ -46,7 +45,7 @@ def create_plot(name):
     return ax
 
 def plot(ax, prices, cumulative_depths, color = None):
-    handle = ax.fill_between(prices, 0, cumulative_depths)
+    handle = ax.fill_between(prices, 0, cumulative_depths, color=color)
     return handle
 
 def show_plot(name):
@@ -70,111 +69,43 @@ if not args.file:
 else:
     response_json = json.load(open(args.file))
 
-
-
 ######### GENERATE SOURCES #########
-sources = []
-depths_by_source_name = {}
+# returns sources[], bucket_prices
+def gen_sources(side):
+    sources = []
+    bucket_prices = []
 
-MAX_BUCKET = 0
-for bucket, data_by_bucket_price in enumerate(response_json[args.side]['dataByBucketPrice']):
-    for source_name in data_by_bucket_price.keys():
-        if args.sources != "" and not source_name.lower() in args.sources.lower():
-            continue
-        elif source_name == "cumulative":
-            continue
+    depths_by_source_name = {}
+    for bucket, data_by_bucket_price in enumerate(response_json[side]['dataByBucketPrice']):
+        for source_name in data_by_bucket_price.keys():
+            if args.sources != "" and not source_name.lower() in args.sources.lower():
+                continue
+            elif source_name == "cumulative" or source_name == "price" or source_name == "bucket":
+                continue
 
-        if not source_name in depths_by_source_name:
-            depths_by_source_name[source_name] = []
+            if not source_name in depths_by_source_name:
+                depths_by_source_name[source_name] = []
+            
+            depths_by_source_name[source_name].append(Depth(float(bucket), float(data_by_bucket_price[source_name]), float(data_by_bucket_price["price"])))
         
-        depths_by_source_name[source_name].append(Depth(float(bucket), float(data_by_bucket_price[source_name]), float(data_by_bucket_price["price"])))
-    
-    BUCKET_RANGES[int(bucket)] = BucketRange(float(data_by_bucket_price["price"]),float(data_by_bucket_price["price"]),float(data_by_bucket_price["price"]),[float(data_by_bucket_price["price"])])
-    MAX_BUCKET = bucket
+        bucket_prices.append(float(data_by_bucket_price["price"]))
 
-sources = [Source(name, depths_by_source_name[name]) for name in depths_by_source_name.keys()]
-
-#print(response_json['buy']['dataByBucketPrice'][0].keys())
-#sys.exit(0)
-
-'''
-for name,inouts in response_json['depth'].items():
-    if args.sources != "" and not name.lower() in args.sources.lower():
-        continue
-    pprint(inouts)
-    depths = []
-    for inout in inouts:
-        depth = Depth(float(inout["bucket"]), float(inout["output"]), float(inout["price"]))
-        depths.append(depth)
-
-        BUCKET_RANGES[int(depth.bucket)] = BucketRange(0.0,0.0,0.0,BUCKET_RANGES[int(depth.bucket)].raw + [float(depth.price)])
-    sources.append(Source(name, depths))
-'''
-  
-######### COMPUTE BUCKET RANGES #########
-for i,raw_bucket_range in enumerate(BUCKET_RANGES):
-    min = sys.float_info.max
-    mid = 0.0
-    max = 0.0
-
-    for price in raw_bucket_range.raw:
-        if price < min:
-            min = price
-        if price > max:
-            max = price
-
-    if raw_bucket_range.raw:
-        mid = statistics.mean(raw_bucket_range.raw)
-        if mid < MIN_PRICE:
-            MIN_PRICE = mid
-        if mid > MAX_PRICE:
-            MAX_PRICE = mid
-
-    BUCKET_RANGES[i] = BucketRange(min, mid, max, raw_bucket_range.raw)
-
-######### INTERPOLATE BUCKET RANGES #########
-bucket_price_step = 0
-for i,bucket_range in enumerate(BUCKET_RANGES):
-    if i == 0:
-        continue
-    
-    # Already have a range
-    if bucket_range.raw:
-        bucket_price_step = 0
-        continue
-
-
-    # Compute price step to next valid
-    if bucket_price_step == 0:
-        for j in range(i+1, len(BUCKET_RANGES)):
-            if BUCKET_RANGES[j].raw:
-                bucket_price_step = (BUCKET_RANGES[j].mid - BUCKET_RANGES[i-1].mid) / (j - i + 1)
-                print("FOUND: %f"%(bucket_price_step))
-                break
-
-    # Could not find a future non-empty bucket
-    if bucket_price_step == 0:
-        bucket_price_step = (MAX_PRICE - MIN_PRICE) / float(MAX_BUCKET)
-
-    last_bucket_range = BUCKET_RANGES[i-1]
-    BUCKET_RANGES[i] = BucketRange(
-        last_bucket_range.min + bucket_price_step,
-        last_bucket_range.mid + bucket_price_step,
-        last_bucket_range.max + bucket_price_step,
-        []
-    )
+    sources = [Source(name, depths_by_source_name[name]) for name in depths_by_source_name.keys()]
+    return (sources, bucket_prices)
 
 ######### ALGOS #########
 # Convert an array of Depth[] to (prices[], cumulative_depths[])
 # This output gets plotted, with prices on the x-axis and cumulative-depths on the y-axis.
-def depths_to_xy(depths):
+def depths_to_xy(depths, bucket_prices):
     prices = []
     cumulative_depths = []
     for depth in depths:
-        if args.x_axis == "price":
-            prices.append(BUCKET_RANGES[int(depth.bucket)].mid)
+        #if args.x_axis == "price":
+        prices.append(bucket_prices[int(depth.bucket)])
+        '''
         else:
             prices.append(depth.bucket)
+        '''
         cumulative_depths.append(depth.value)
     return (prices, cumulative_depths)
 
@@ -189,14 +120,7 @@ def compare_depths(d1, d2):
 
 # Sorts input Depth[] and then merges instances that have the same cumulative depth.
 def merge_and_sort(depths):
-    merged_depths = []
-    for depth in sorted(depths,  key=cmp_to_key(compare_depths)):
-        if merged_depths and merged_depths[-1].bucket == depth.bucket:
-            print("Merging ", depth.bucket)
-            merged_depths[-1] = Depth(merged_depths[-1].bucket, merged_depths[-1].value + depth.value, (merged_depths[-1].price + depth.price) / 2)
-        else:
-            merged_depths.append(depth)
-    return merged_depths
+    return sorted(depths, key=cmp_to_key(compare_depths))
 
 # Returns unified depths across all sources.
 # All depths at each price will be summed together.
@@ -204,7 +128,7 @@ def get_unified_depths(sources):
     cumulative_depths = [depth for source in sources for depth in source.depths]  
     return get_interpolated(merge_and_sort(unified_depths))
 
-def get_interpolated(depths):
+def get_interpolated(depths, bucket_prices):
     interpolated_depths = []
     for i,depth in enumerate(depths):
         if i == 0:
@@ -227,13 +151,13 @@ def get_interpolated(depths):
 
     # add remaining buckets from [last_bucket..<MAX_BUCKET>]
     (next_bucket, value_of_next_bucket) = (int(interpolated_depths[-1].bucket) + 1, interpolated_depths[-1].value) if interpolated_depths else (0, 0)
-    for bucket in range(next_bucket, int(MAX_BUCKET) + 1):
-        interpolated_depths.append(Depth(bucket, value_of_next_bucket, BUCKET_RANGES[bucket].max))
+    for bucket in range(next_bucket, len(bucket_prices)):
+        interpolated_depths.append(Depth(bucket, value_of_next_bucket, bucket_prices[bucket]))
 
     # add buckets from [0..first_bucket]
     first_bucket = int(interpolated_depths[0].bucket)
     for bucket in reversed(range(0, first_bucket)):
-        interpolated_depths.insert(0, Depth(bucket,0, BUCKET_RANGES[bucket].min))
+        interpolated_depths.insert(0, Depth(bucket,0, bucket_prices[bucket]))
 
     return interpolated_depths
 
@@ -279,34 +203,33 @@ def print_cumulative(sources):
     plot_and_show("Cumulative", prices, cumulative_depths)
 
 # Prints all sources unified into a single chart.
-def print_unified(sources):
+def print_unified(ax, sources, bucket_prices):
     # Unlike the cumulative printer, we build the cumulative depth as we go!
     unified_cumulative_depths = []
-    ax = create_plot("Unified")
 
     plots = []
     for source in sources:
         print("Adding ", source.name)
-        sanitized_depths = offset_from_unified(get_interpolated(merge_and_sort(source.depths)), unified_cumulative_depths)
-        (prices, individual_cumulative_depths) = depths_to_xy(sanitized_depths)
+        sanitized_depths = offset_from_unified(get_interpolated(merge_and_sort(source.depths), bucket_prices), unified_cumulative_depths)
+        (prices, individual_cumulative_depths) = depths_to_xy(sanitized_depths, bucket_prices)
         plots.append({"name": source.name, "prices": prices, "individual_cumulative_depths": individual_cumulative_depths})
 
         # Update unified cumulative depths
         unified_cumulative_depths = sanitized_depths
- 
 
     handles = []
     labels = []
     color_idx = 0
     #colors = ["#6262A6", "#181632", "#25CD2C", "#FB4C5A", "#5C51FE"]
+    colors = ["#C2FAFF", "#8ADEFF", "#55B0FE", "#3F91FF", "#286FFF", "#144AEB", "#0026BB"]
     for single_plot in reversed(plots):
-        handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"])#, colors[color_idx])
-        #color_idx = (color_idx + 1)%len(colors)
+        handle = plot(ax, single_plot["prices"], single_plot["individual_cumulative_depths"], colors[color_idx])
+        color_idx = (color_idx + 1)%len(colors)
         handles.append(handle)
         labels.append(single_plot["name"])
 
     ax.legend(handles, labels)
-    show_plot('unified')
+    
 
 if args.plot == 'individual':
     print_individual(sources)
@@ -314,5 +237,10 @@ elif args.plot == 'both':
     print_unified(sources)
     print_individual(sources)
 else:
-    print_unified(sources)
+    ax = create_plot("Unified")
+    buy_sources,buy_bucket_prices = gen_sources("buy")
+    print_unified(ax, buy_sources, buy_bucket_prices)
+    sell_sources,sell_bucket_prices = gen_sources("sell")
+    print_unified(ax, sell_sources, sell_bucket_prices)
+    show_plot('unified')
     
